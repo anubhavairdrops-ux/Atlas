@@ -20,10 +20,23 @@ export interface StudySystem {
   contentCompleted: boolean;
   // QBank — binary
   qbankDone: boolean;
-  // Notes & metadata (kept for extensibility with future revision fields)
+  // Notes & metadata
   weakAreas: string;
+  // Confidence (Strong / Average / Weak) — doubles as spaced-rep confidence
   status: SystemStatus;
   updatedAt: Date;
+
+  // ── Revision engine fields (v4) ─────────────────────────────────────────
+  /** Set when both contentCompleted and qbankDone first become true. */
+  completionDate: Date | null;
+  /** How many revisions have been completed. */
+  revisionCount: number;
+  /** Date of most recent completed revision. */
+  lastRevisionDate: Date | null;
+  /** Current calculated interval in days. */
+  currentRevisionInterval: number | null;
+  /** Absolute date the next revision is due. */
+  nextRevisionDate: Date | null;
 }
 
 export interface HistoryEntry {
@@ -70,6 +83,25 @@ export class AtlasDB extends Dexie {
             sys['contentUnitsTotal'] = wasDone ? 1 : 0;
             sys['contentUnitsCompleted'] = wasDone ? 1 : 0;
             sys['contentCompleted'] = wasDone;
+          });
+      });
+    // v4: add revision engine fields
+    this.version(4)
+      .stores({
+        subjects: '++id, name',
+        systems: '++id, subjectId, name, updatedAt, nextRevisionDate',
+        history: '++id, subjectId, systemId, completedAt',
+      })
+      .upgrade(tx => {
+        return tx
+          .table('systems')
+          .toCollection()
+          .modify((sys: Record<string, unknown>) => {
+            if (!('completionDate' in sys))         sys['completionDate'] = null;
+            if (!('revisionCount' in sys))          sys['revisionCount'] = 0;
+            if (!('lastRevisionDate' in sys))       sys['lastRevisionDate'] = null;
+            if (!('currentRevisionInterval' in sys)) sys['currentRevisionInterval'] = null;
+            if (!('nextRevisionDate' in sys))       sys['nextRevisionDate'] = null;
           });
       });
   }
@@ -119,6 +151,16 @@ export async function importData(data: {
             base.contentUnitsCompleted = wasDone ? 1 : 0;
             base.contentCompleted = wasDone;
           }
+          // Default revision fields
+          if (!('completionDate' in s)) base.completionDate = null;
+          if (!('revisionCount' in s)) base.revisionCount = 0;
+          if (!('lastRevisionDate' in s)) base.lastRevisionDate = null;
+          if (!('currentRevisionInterval' in s)) base.currentRevisionInterval = null;
+          if (!('nextRevisionDate' in s)) base.nextRevisionDate = null;
+          // Coerce dates
+          if (base.completionDate) base.completionDate = new Date(base.completionDate as unknown as string);
+          if (base.lastRevisionDate) base.lastRevisionDate = new Date(base.lastRevisionDate as unknown as string);
+          if (base.nextRevisionDate) base.nextRevisionDate = new Date(base.nextRevisionDate as unknown as string);
           return base;
         }),
       );

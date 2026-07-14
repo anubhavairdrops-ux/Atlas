@@ -1,0 +1,194 @@
+# ATLAS v2 — Prompt 3
+## Adaptive Revision Engine
+
+Assume Prompt 1 (Content Progress) and Prompt 2 (Timeline) are already implemented.
+
+Implement an adaptive spaced repetition system at the SYSTEM level.
+
+---
+
+## Initial Evaluation
+
+When both Content and QBank are completed, ask:
+
+How well do you know this system?
+
+🟢 Strong
+🟡 Average
+🔴 Weak
+
+Show this only once after initial completion.
+
+---
+
+## Spaced Repetition
+
+Initial intervals:
+
+Weak = 7 days
+
+Average = 14 days
+
+Strong = 30 days
+
+Multipliers:
+
+Strong = ×2.0
+
+Average = ×1.5
+
+Weak = ×0.5
+
+Minimum interval = 3 days
+
+Maximum interval = 90 days
+
+After every revision:
+
+newInterval = previousInterval × multiplier
+
+Clamp the interval between 3 and 90 days.
+
+nextRevisionDate = today + newInterval
+
+Keep intervals and multipliers configurable.
+
+---
+
+## Revision Workflow
+
+Whenever a revision becomes due, show:
+
+Revision
+
+When completed:
+
+• Increment Revisions Completed
+
+• Update Last Revised
+
+• Ask again:
+
+How well do you know this system?
+
+🟢 Strong
+
+🟡 Average
+
+🔴 Weak
+
+• Update confidence
+
+• Calculate the next interval
+
+• Schedule the next revision
+
+Repeat indefinitely.
+
+---
+
+## Timeline
+
+Every scheduled revision should automatically appear under **Upcoming** in the correct month.
+
+If a revision is not completed on time, automatically move it to **Overdue**.
+
+Display:
+
+Cardiology Revision
+
+4 days overdue
+
+When completed:
+
+• Remove the old Timeline entry
+
+• Schedule the next revision
+
+• Automatically create the next Upcoming entry
+
+Timeline should always stay synchronized with the revision engine.
+
+---
+
+## Today
+
+Automatically display:
+
+• Due revisions
+
+• Overdue revisions
+
+Only actionable revisions should appear.
+
+Completed revisions should disappear immediately.
+
+---
+
+## Search
+
+Keep the existing Search UI.
+
+Support:
+
+strong
+
+average
+
+weak
+
+revision
+
+due
+
+overdue
+
+completed
+
+Support combinations like:
+
+weak medicine
+
+strong surgery
+
+revision cardio
+
+overdue ent
+
+---
+
+## System Details
+
+Display:
+
+• Confidence
+
+• Revisions Completed
+
+• Last Revised
+
+• Current Revision Interval
+
+• Next Revision
+
+Do not show this information on the main interface.
+
+---
+
+## Data
+
+Store:
+
+confidence
+
+completionDate
+
+revisionCount
+
+lastRevisionDate
+
+currentRevisionInterval
+
+nextRevisionDate
+
+Timeline, Today and Search should derive their revision state from this data.

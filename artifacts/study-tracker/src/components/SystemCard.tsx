@@ -1,114 +1,97 @@
-import { useRef, useState } from 'react';
-import { StudySystem } from '@/db/database';
-import { updateSystem, deleteSystem, logCompletion } from '@/db/hooks';
+import { useEffect, useRef, useState } from 'react';
+import { StudySystem, SystemStatus } from '@/db/database';
+import { updateSystem, deleteSystem, logCompletion, recordInitialEvaluation } from '@/db/hooks';
 import { ProgressBar } from './ProgressBar';
-import { ChevronDown, Trash2, Check } from 'lucide-react';
+import { ConfidenceDialog } from './ConfidenceDialog';
+import { ChevronDown, Trash2, Check, RotateCcw, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { format, formatDistanceToNow } from 'date-fns';
+import { isRevisionDue, isRevisionOverdue, daysOverdue } from '@/db/revisionEngine';
 
 interface SystemCardProps {
   system: StudySystem;
   subjectName: string;
 }
 
-// ── Circular progress indicator ─────────────────────────────────────────────
+// ── Circular progress ring ────────────────────────────────────────────────────
 function ContentCircle({ pct }: { pct: number }) {
   const r = 9;
   const circ = 2 * Math.PI * r;
   const dash = Math.max(0, Math.min(1, pct / 100)) * circ;
   return (
-    <svg
-      width="22"
-      height="22"
-      viewBox="0 0 22 22"
-      className="shrink-0 -rotate-90"
-      aria-hidden
-    >
-      {/* Track */}
-      <circle
-        cx="11"
-        cy="11"
-        r={r}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2.5"
-        className="text-muted-foreground/25"
-      />
-      {/* Progress arc */}
+    <svg width="22" height="22" viewBox="0 0 22 22" className="shrink-0 -rotate-90" aria-hidden>
+      <circle cx="11" cy="11" r={r} fill="none" stroke="currentColor" strokeWidth="2.5" className="text-muted-foreground/25" />
       {pct > 0 && (
-        <circle
-          cx="11"
-          cy="11"
-          r={r}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.5"
-          strokeDasharray={`${dash} ${circ}`}
-          strokeLinecap="round"
-          className="text-primary transition-all duration-300"
-        />
+        <circle cx="11" cy="11" r={r} fill="none" stroke="currentColor" strokeWidth="2.5"
+          strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
+          className="text-primary transition-all duration-300" />
       )}
     </svg>
   );
 }
 
-// ── SystemCard ───────────────────────────────────────────────────────────────
+// ── SystemCard ────────────────────────────────────────────────────────────────
 export function SystemCard({ system, subjectName }: SystemCardProps) {
   const [expanded, setExpanded] = useState(false);
 
   // Content dialogs
-  const [showInitDialog, setShowInitDialog] = useState(false);
-  const [initValue, setInitValue] = useState('');
+  const [showInitDialog, setShowInitDialog]   = useState(false);
+  const [initValue, setInitValue]             = useState('');
   const [showEditContent, setShowEditContent] = useState(false);
-  const [editCompleted, setEditCompleted] = useState('');
-  const [editTotal, setEditTotal] = useState('');
+  const [editCompleted, setEditCompleted]     = useState('');
+  const [editTotal, setEditTotal]             = useState('');
 
-  // Long-press detection for the Content row
+  // Initial evaluation (shown once both tasks complete)
+  const [showEvalDialog, setShowEvalDialog]   = useState(false);
+  // Guard to prevent re-triggering if already open
+  const evalShownRef = useRef(false);
+
+  // Long-press detection for Content row
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isLongPress = useRef(false);
+  const isLongPress    = useRef(false);
+
+  // ── Detect first full completion ──────────────────────────────────────────
+  useEffect(() => {
+    if (
+      system.contentCompleted &&
+      system.qbankDone &&
+      !system.completionDate &&
+      !evalShownRef.current
+    ) {
+      evalShownRef.current = true;
+      setShowEvalDialog(true);
+    }
+  }, [system.contentCompleted, system.qbankDone, system.completionDate]);
 
   // Progress
   const completedCount = (system.contentCompleted ? 1 : 0) + (system.qbankDone ? 1 : 0);
-  const progress = (completedCount / 2) * 100;
-
-  const contentPct =
+  const progress       = (completedCount / 2) * 100;
+  const contentPct     =
     system.contentInitialized && system.contentUnitsTotal > 0
       ? (system.contentUnitsCompleted / system.contentUnitsTotal) * 100
       : 0;
 
-  // ── Content tap ────────────────────────────────────────────────────────────
-  const handleContentTap = () => {
-    if (isLongPress.current) return; // consumed by long press
+  // Revision state
+  const revisionDue      = isRevisionDue(system);
+  const revisionOverdue  = isRevisionOverdue(system);
+  const overdueDays      = daysOverdue(system);
 
-    if (!system.contentInitialized) {
-      setInitValue('');
-      setShowInitDialog(true);
-      return;
-    }
-    if (system.contentCompleted) return; // done — edit via long press
+  // ── Content tap ───────────────────────────────────────────────────────────
+  const handleContentTap = () => {
+    if (isLongPress.current) return;
+    if (!system.contentInitialized) { setInitValue(''); setShowInitDialog(true); return; }
+    if (system.contentCompleted) return;
 
     const newCompleted = system.contentUnitsCompleted + 1;
-    const isNowDone = newCompleted >= system.contentUnitsTotal;
-
-    updateSystem(system.id!, {
-      contentUnitsCompleted: newCompleted,
-      contentCompleted: isNowDone,
-    });
-
+    const isNowDone    = newCompleted >= system.contentUnitsTotal;
+    updateSystem(system.id!, { contentUnitsCompleted: newCompleted, contentCompleted: isNowDone });
     if (isNowDone) {
       if (navigator.vibrate) navigator.vibrate([10, 50, 10]);
-      logCompletion({
-        subjectId: system.subjectId,
-        subjectName,
-        systemId: system.id!,
-        systemName: system.name,
-        taskKey: 'contentDone',
-        taskLabel: 'Content',
-        completedAt: new Date(),
-      });
+      logCompletion({ subjectId: system.subjectId, subjectName, systemId: system.id!, systemName: system.name, taskKey: 'contentDone', taskLabel: 'Content', completedAt: new Date() });
     }
   };
 
@@ -122,100 +105,80 @@ export function SystemCard({ system, subjectName }: SystemCardProps) {
       setShowEditContent(true);
     }, 500);
   };
+  const handleContentPointerUp    = () => { if (longPressTimer.current) clearTimeout(longPressTimer.current); };
+  const handleContentPointerLeave = () => { if (longPressTimer.current) clearTimeout(longPressTimer.current); };
 
-  const handleContentPointerUp = () => {
-    if (longPressTimer.current) clearTimeout(longPressTimer.current);
-  };
-
-  const handleContentPointerLeave = () => {
-    if (longPressTimer.current) clearTimeout(longPressTimer.current);
-  };
-
-  // ── Content init ───────────────────────────────────────────────────────────
+  // ── Content init / edit ───────────────────────────────────────────────────
   const handleInitSave = () => {
     const total = parseInt(initValue, 10);
     if (!total || total <= 0) return;
-    updateSystem(system.id!, {
-      contentInitialized: true,
-      contentUnitsTotal: total,
-      contentUnitsCompleted: 0,
-      contentCompleted: false,
-    });
-    setShowInitDialog(false);
-    setInitValue('');
+    updateSystem(system.id!, { contentInitialized: true, contentUnitsTotal: total, contentUnitsCompleted: 0, contentCompleted: false });
+    setShowInitDialog(false); setInitValue('');
   };
 
-  // ── Content edit ───────────────────────────────────────────────────────────
   const handleEditSave = () => {
-    const total = parseInt(editTotal, 10);
-    const completed = parseInt(editCompleted, 10);
+    const total = parseInt(editTotal, 10), completed = parseInt(editCompleted, 10);
     if (isNaN(total) || total <= 0 || isNaN(completed) || completed < 0) return;
     const clamped = Math.min(completed, total);
-    const isNowDone = clamped >= total;
-    updateSystem(system.id!, {
-      contentInitialized: true,
-      contentUnitsTotal: total,
-      contentUnitsCompleted: clamped,
-      contentCompleted: isNowDone,
-    });
+    updateSystem(system.id!, { contentInitialized: true, contentUnitsTotal: total, contentUnitsCompleted: clamped, contentCompleted: clamped >= total });
     setShowEditContent(false);
   };
 
   const handleEditReset = () => {
-    updateSystem(system.id!, {
-      contentInitialized: false,
-      contentUnitsTotal: 0,
-      contentUnitsCompleted: 0,
-      contentCompleted: false,
-    });
+    updateSystem(system.id!, { contentInitialized: false, contentUnitsTotal: 0, contentUnitsCompleted: 0, contentCompleted: false });
     setShowEditContent(false);
   };
 
-  // ── QBank toggle ───────────────────────────────────────────────────────────
+  // ── QBank toggle ──────────────────────────────────────────────────────────
   const toggleQBank = () => {
     const wasChecked = system.qbankDone;
     updateSystem(system.id!, { qbankDone: !wasChecked });
     if (!wasChecked) {
-      logCompletion({
-        subjectId: system.subjectId,
-        subjectName,
-        systemId: system.id!,
-        systemName: system.name,
-        taskKey: 'qbankDone',
-        taskLabel: 'Qbank',
-        completedAt: new Date(),
-      });
+      logCompletion({ subjectId: system.subjectId, subjectName, systemId: system.id!, systemName: system.name, taskKey: 'qbankDone', taskLabel: 'Qbank', completedAt: new Date() });
     }
   };
 
-  const handleStatusChange = (status: 'Strong' | 'Average' | 'Weak') => {
-    updateSystem(system.id!, { status });
+  // ── Initial evaluation ────────────────────────────────────────────────────
+  const handleEvalSelect = async (confidence: SystemStatus) => {
+    setShowEvalDialog(false);
+    evalShownRef.current = false;
+    await recordInitialEvaluation(system.id!, confidence);
   };
 
-  const handleNotesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    updateSystem(system.id!, { weakAreas: e.target.value });
-  };
+  const handleStatusChange = (status: SystemStatus) => updateSystem(system.id!, { status });
+  const handleNotesChange  = (e: React.ChangeEvent<HTMLTextAreaElement>) => updateSystem(system.id!, { weakAreas: e.target.value });
+  const handleDelete       = () => { if (confirm('Are you sure you want to delete this system?')) deleteSystem(system.id!); };
 
-  const handleDelete = () => {
-    if (confirm('Are you sure you want to delete this system?')) {
-      deleteSystem(system.id!);
-    }
-  };
-
-  const statusColors = {
-    Strong: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border-green-200 dark:border-green-800/50',
+  const statusColors: Record<SystemStatus, string> = {
+    Strong:  'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border-green-200 dark:border-green-800/50',
     Average: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400 border-amber-200 dark:border-amber-800/50',
-    Weak: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800/50',
+    Weak:    'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800/50',
   };
 
   return (
     <>
-      <div className="bg-card rounded-2xl border border-card-border shadow-sm overflow-hidden transition-all duration-300">
+      <div className={cn(
+        'bg-card rounded-2xl border border-card-border shadow-sm overflow-hidden transition-all duration-300',
+        revisionOverdue && 'border-destructive/50',
+        revisionDue && !revisionOverdue && 'border-amber-400/50',
+      )}>
+        {/* Revision due banner */}
+        {revisionDue && (
+          <div className={cn(
+            'flex items-center gap-2 px-4 py-2 text-xs font-semibold',
+            revisionOverdue
+              ? 'bg-destructive/10 text-destructive'
+              : 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400',
+          )}>
+            <Clock className="w-3.5 h-3.5 shrink-0" />
+            {revisionOverdue
+              ? `Revision overdue — ${overdueDays} day${overdueDays !== 1 ? 's' : ''}`
+              : 'Revision due today'}
+          </div>
+        )}
+
         {/* Header */}
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="w-full p-4 flex items-center justify-between text-left hover:bg-muted/30 transition-colors focus:outline-none"
-        >
+        <button onClick={() => setExpanded(!expanded)} className="w-full p-4 flex items-center justify-between text-left hover:bg-muted/30 transition-colors focus:outline-none">
           <div className="flex-1 pr-4">
             <div className="flex items-center gap-3 mb-2">
               <h4 className="font-semibold text-[23px] leading-tight text-foreground">{system.name}</h4>
@@ -233,126 +196,86 @@ export function SystemCard({ system, subjectName }: SystemCardProps) {
           </div>
         </button>
 
-        {/* Expanded content */}
-        <div
-          className={cn(
-            'grid transition-all duration-300 ease-in-out',
-            expanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0',
-          )}
-        >
+        {/* Expanded body */}
+        <div className={cn('grid transition-all duration-300 ease-in-out', expanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0')}>
           <div className="overflow-hidden">
             <div className="p-4 pt-0 border-t border-border/50 bg-card">
               <div className="grid gap-2 py-4">
-
-                {/* ── Content row ── */}
+                {/* Content row */}
                 <div
-                  className={cn(
-                    'flex items-center gap-3 w-full p-3 rounded-xl transition-colors text-left select-none',
-                    !system.contentCompleted && 'hover:bg-muted/50 cursor-pointer',
-                    system.contentCompleted && 'cursor-default',
-                  )}
+                  className={cn('flex items-center gap-3 w-full p-3 rounded-xl transition-colors text-left select-none', !system.contentCompleted && 'hover:bg-muted/50 cursor-pointer', system.contentCompleted && 'cursor-default')}
                   onClick={handleContentTap}
                   onPointerDown={handleContentPointerDown}
                   onPointerUp={handleContentPointerUp}
                   onPointerLeave={handleContentPointerLeave}
                   onContextMenu={e => e.preventDefault()}
                 >
-                  {system.contentCompleted ? (
-                    // Completed: no circle, no fraction, strikethrough
-                    <div className="w-[22px] h-[22px] shrink-0" />
-                  ) : (
-                    <ContentCircle pct={contentPct} />
-                  )}
-
-                  <span
-                    className={cn(
-                      'text-sm font-medium flex-1 transition-all duration-500',
-                      system.contentCompleted
-                        ? 'text-muted-foreground/40 line-through'
-                        : 'text-foreground',
-                    )}
-                  >
-                    Content
-                  </span>
-
+                  {system.contentCompleted ? <div className="w-[22px] h-[22px] shrink-0" /> : <ContentCircle pct={contentPct} />}
+                  <span className={cn('text-sm font-medium flex-1 transition-all duration-500', system.contentCompleted ? 'text-muted-foreground/40 line-through' : 'text-foreground')}>Content</span>
                   {system.contentInitialized && !system.contentCompleted && (
-                    <span className="text-xs text-muted-foreground tabular-nums shrink-0">
-                      {system.contentUnitsCompleted}/{system.contentUnitsTotal}
-                    </span>
+                    <span className="text-xs text-muted-foreground tabular-nums shrink-0">{system.contentUnitsCompleted}/{system.contentUnitsTotal}</span>
                   )}
                 </div>
 
-                {/* ── QBank row ── */}
-                <button
-                  onClick={toggleQBank}
-                  className="flex items-center gap-3 w-full p-3 rounded-xl hover:bg-muted/50 transition-colors text-left group"
-                >
-                  <div
-                    className={cn(
-                      'w-6 h-6 rounded-md flex items-center justify-center transition-all duration-200 border-2',
-                      system.qbankDone
-                        ? 'bg-primary border-primary text-primary-foreground shadow-sm'
-                        : 'border-muted-foreground/30 bg-background group-hover:border-primary/50',
-                    )}
-                  >
+                {/* QBank row */}
+                <button onClick={toggleQBank} className="flex items-center gap-3 w-full p-3 rounded-xl hover:bg-muted/50 transition-colors text-left group">
+                  <div className={cn('w-6 h-6 rounded-md flex items-center justify-center transition-all duration-200 border-2', system.qbankDone ? 'bg-primary border-primary text-primary-foreground shadow-sm' : 'border-muted-foreground/30 bg-background group-hover:border-primary/50')}>
                     {system.qbankDone && <Check className="w-4 h-4" />}
                   </div>
-                  <span
-                    className={cn(
-                      'text-sm font-medium transition-colors duration-200',
-                      system.qbankDone ? 'text-muted-foreground line-through' : 'text-foreground',
-                    )}
-                  >
-                    Qbank
-                  </span>
+                  <span className={cn('text-sm font-medium transition-colors duration-200', system.qbankDone ? 'text-muted-foreground line-through' : 'text-foreground')}>Qbank</span>
                 </button>
               </div>
 
               <div className="space-y-4 pt-2">
-                {/* Status selector */}
+                {/* Confidence / Status selector */}
                 <div>
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">
-                    Confidence Level
-                  </label>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Confidence Level</label>
                   <div className="flex gap-2">
                     {(['Strong', 'Average', 'Weak'] as const).map(s => (
-                      <button
-                        key={s}
-                        onClick={() => handleStatusChange(s)}
-                        className={cn(
-                          'flex-1 py-2 px-3 text-sm font-medium rounded-xl border transition-all',
-                          system.status === s
-                            ? statusColors[s] + ' ring-2 ring-offset-2 ring-background ring-offset-transparent shadow-sm'
-                            : 'bg-background border-border text-muted-foreground hover:bg-muted',
-                        )}
-                      >
+                      <button key={s} onClick={() => handleStatusChange(s)}
+                        className={cn('flex-1 py-2 px-3 text-sm font-medium rounded-xl border transition-all',
+                          system.status === s ? statusColors[s] + ' ring-2 ring-offset-2 ring-background ring-offset-transparent shadow-sm' : 'bg-background border-border text-muted-foreground hover:bg-muted')}>
                         {s}
                       </button>
                     ))}
                   </div>
                 </div>
 
+                {/* Revision details — shown only once revision engine is active */}
+                {system.completionDate && (
+                  <div className="bg-muted/40 rounded-xl p-4 space-y-2">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Revision</p>
+                    <RevisionRow label="Revisions Completed" value={String(system.revisionCount ?? 0)} />
+                    <RevisionRow
+                      label="Last Revised"
+                      value={system.lastRevisionDate ? formatDistanceToNow(new Date(system.lastRevisionDate), { addSuffix: true }) : 'Never'}
+                    />
+                    <RevisionRow
+                      label="Current Interval"
+                      value={system.currentRevisionInterval ? `${system.currentRevisionInterval} days` : '—'}
+                    />
+                    <RevisionRow
+                      label="Next Revision"
+                      value={system.nextRevisionDate
+                        ? format(new Date(system.nextRevisionDate), 'MMM d, yyyy')
+                        : '—'}
+                      highlight={revisionDue}
+                      highlightClass={revisionOverdue ? 'text-destructive font-semibold' : 'text-amber-600 font-semibold'}
+                    />
+                  </div>
+                )}
+
                 {/* Notes */}
                 <div>
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">
-                    Weak Areas / Notes
-                  </label>
-                  <Textarea
-                    value={system.weakAreas}
-                    onChange={handleNotesChange}
-                    placeholder="Note down concepts you struggle with..."
-                    className="min-h-[100px] resize-none rounded-xl bg-muted/30 border-transparent focus-visible:bg-background focus-visible:border-primary"
-                  />
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Weak Areas / Notes</label>
+                  <Textarea value={system.weakAreas} onChange={handleNotesChange} placeholder="Note down concepts you struggle with..."
+                    className="min-h-[100px] resize-none rounded-xl bg-muted/30 border-transparent focus-visible:bg-background focus-visible:border-primary" />
                 </div>
 
                 {/* Delete */}
                 <div className="flex justify-end pt-4 mt-2 border-t border-border/50">
-                  <button
-                    onClick={handleDelete}
-                    className="flex items-center gap-2 text-sm text-destructive hover:text-destructive/80 font-medium px-4 py-2 rounded-lg hover:bg-destructive/10 transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    Delete System
+                  <button onClick={handleDelete} className="flex items-center gap-2 text-sm text-destructive hover:text-destructive/80 font-medium px-4 py-2 rounded-lg hover:bg-destructive/10 transition-colors">
+                    <Trash2 className="w-4 h-4" /> Delete System
                   </button>
                 </div>
               </div>
@@ -361,96 +284,67 @@ export function SystemCard({ system, subjectName }: SystemCardProps) {
         </div>
       </div>
 
-      {/* ── Init dialog ──────────────────────────────────────────────────── */}
+      {/* ── Initial evaluation dialog ─────────────────────────────────────── */}
+      <ConfidenceDialog
+        open={showEvalDialog}
+        title="How well do you know this system?"
+        subtitle={`You've completed ${system.name}. Rate your confidence to schedule your first revision.`}
+        onSelect={handleEvalSelect}
+      />
+
+      {/* ── Content init dialog ───────────────────────────────────────────── */}
       <Dialog open={showInitDialog} onOpenChange={setShowInitDialog}>
         <DialogContent className="sm:max-w-[360px] rounded-2xl mx-4 w-[calc(100%-2rem)]">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-semibold">How many content units does this system have?</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle className="text-xl font-semibold">How many content units does this system have?</DialogTitle></DialogHeader>
           <div className="py-4">
-            <Input
-              autoFocus
-              type="number"
-              min="1"
-              placeholder="e.g. 15"
-              value={initValue}
-              onChange={e => setInitValue(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter') { e.preventDefault(); handleInitSave(); }
-              }}
-              className="text-lg py-6 px-4 bg-muted/50 border-transparent focus-visible:ring-primary focus-visible:bg-background"
-            />
+            <Input autoFocus type="number" min="1" placeholder="e.g. 15" value={initValue} onChange={e => setInitValue(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleInitSave(); } }}
+              className="text-lg py-6 px-4 bg-muted/50 border-transparent focus-visible:ring-primary focus-visible:bg-background" />
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setShowInitDialog(false)} className="rounded-xl">Cancel</Button>
-            <Button
-              onClick={handleInitSave}
-              disabled={!initValue || parseInt(initValue, 10) <= 0}
-              className="rounded-xl font-semibold px-8 shadow-sm"
-            >
-              Save
-            </Button>
+            <Button onClick={handleInitSave} disabled={!initValue || parseInt(initValue, 10) <= 0} className="rounded-xl font-semibold px-8 shadow-sm">Save</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* ── Edit dialog (long press) ─────────────────────────────────────── */}
+      {/* ── Edit dialog (long press) ──────────────────────────────────────── */}
       <Dialog open={showEditContent} onOpenChange={setShowEditContent}>
         <DialogContent className="sm:max-w-[360px] rounded-2xl mx-4 w-[calc(100%-2rem)]">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-semibold">Content Progress</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle className="text-xl font-semibold">Content Progress</DialogTitle></DialogHeader>
           <div className="py-4 space-y-4">
             <div>
-              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">
-                Completed Units
-              </label>
-              <Input
-                autoFocus
-                type="number"
-                min="0"
-                value={editCompleted}
-                onChange={e => setEditCompleted(e.target.value)}
-                className="text-lg py-5 px-4 bg-muted/50 border-transparent focus-visible:ring-primary focus-visible:bg-background"
-              />
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Completed Units</label>
+              <Input autoFocus type="number" min="0" value={editCompleted} onChange={e => setEditCompleted(e.target.value)}
+                className="text-lg py-5 px-4 bg-muted/50 border-transparent focus-visible:ring-primary focus-visible:bg-background" />
             </div>
             <div>
-              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">
-                Total Units
-              </label>
-              <Input
-                type="number"
-                min="1"
-                value={editTotal}
-                onChange={e => setEditTotal(e.target.value)}
-                className="text-lg py-5 px-4 bg-muted/50 border-transparent focus-visible:ring-primary focus-visible:bg-background"
-              />
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Total Units</label>
+              <Input type="number" min="1" value={editTotal} onChange={e => setEditTotal(e.target.value)}
+                className="text-lg py-5 px-4 bg-muted/50 border-transparent focus-visible:ring-primary focus-visible:bg-background" />
             </div>
           </div>
           <DialogFooter className="flex-col gap-2 sm:flex-col">
             <div className="flex gap-2 w-full">
               <Button variant="ghost" onClick={() => setShowEditContent(false)} className="flex-1 rounded-xl">Cancel</Button>
-              <Button
-                onClick={handleEditSave}
-                disabled={
-                  !editTotal || parseInt(editTotal, 10) <= 0 ||
-                  !editCompleted || parseInt(editCompleted, 10) < 0
-                }
-                className="flex-1 rounded-xl font-semibold shadow-sm"
-              >
-                Save
-              </Button>
+              <Button onClick={handleEditSave} disabled={!editTotal || parseInt(editTotal, 10) <= 0 || !editCompleted || parseInt(editCompleted, 10) < 0} className="flex-1 rounded-xl font-semibold shadow-sm">Save</Button>
             </div>
-            <Button
-              variant="ghost"
-              onClick={handleEditReset}
-              className="w-full rounded-xl text-destructive hover:text-destructive hover:bg-destructive/10 text-sm"
-            >
-              Reset Progress
+            <Button variant="ghost" onClick={handleEditReset} className="w-full rounded-xl text-destructive hover:text-destructive hover:bg-destructive/10 text-sm">
+              <RotateCcw className="w-3.5 h-3.5 mr-1.5" />Reset Progress
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+// ── Small helper for revision detail rows ─────────────────────────────────────
+function RevisionRow({ label, value, highlight, highlightClass }: { label: string; value: string; highlight?: boolean; highlightClass?: string }) {
+  return (
+    <div className="flex justify-between items-center text-sm">
+      <span className="text-muted-foreground">{label}</span>
+      <span className={cn('font-medium text-foreground', highlight && highlightClass)}>{value}</span>
+    </div>
   );
 }
