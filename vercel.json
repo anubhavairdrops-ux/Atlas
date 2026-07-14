@@ -1,8 +1,8 @@
 {
-  "buildCommand": "pnpm run build",
+  "buildCommand": "pnpm run build && cp -r artifacts/study-tracker/dist ./dist",
   "installCommand": "pnpm install",
   "nodeVersion": "20.x",
-  "outputDirectory": "artifacts/study-tracker/dist",
+  "outputDirectory": "dist",
   "routes": [
     {
       "src": "^/api/(.*)",
