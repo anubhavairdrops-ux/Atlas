@@ -1,5 +1,5 @@
 {
-  "buildCommand": "pnpm run build && mkdir -p dist && cp -r artifacts/study-tracker/dist/* dist/",
+  "buildCommand": "cd artifacts/study-tracker && pnpm run build && mkdir -p ../../dist && cp -r dist/* ../../dist/",
   "installCommand": "pnpm install",
   "nodeVersion": "20.x",
   "outputDirectory": "dist",
