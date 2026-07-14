@@ -289,26 +289,10 @@ export default function Today() {
     }
   });
 
-  systems.forEach(sys => {
-    const subject = subjects.find(s => s.id === sys.subjectId);
-    if (!subject) return;
-    if (!sys.contentCompleted) actionItems.push({ kind: 'content', system: sys, subject });
-  });
-
-  systems.forEach(sys => {
-    const subject = subjects.find(s => s.id === sys.subjectId);
-    if (!subject) return;
-    if (!sys.qbankDone) actionItems.push({ kind: 'qbank', system: sys, subject });
-  });
-
-  // Priority order is already maintained by push order:
-  // revision-overdue → revision-due → content → qbank
-  // Within each group sort overdue by days desc, others alphabetically
+  // Priority order: overdue revisions first (most-days-first), then due-today
   const sortedActions = [
     ...actionItems.filter(i => i.kind === 'revision-overdue').sort((a, b) => (b.overdueDays ?? 0) - (a.overdueDays ?? 0)),
     ...actionItems.filter(i => i.kind === 'revision-due').sort((a, b) => a.system.name.localeCompare(b.system.name)),
-    ...actionItems.filter(i => i.kind === 'content').sort((a, b) => a.system.name.localeCompare(b.system.name)),
-    ...actionItems.filter(i => i.kind === 'qbank').sort((a, b) => a.system.name.localeCompare(b.system.name)),
   ];
 
   // ── Build subject rows ─────────────────────────────────────────────────────
