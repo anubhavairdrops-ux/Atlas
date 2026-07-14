@@ -1,15 +1,5 @@
 {
   "buildCommand": "pnpm run build",
   "installCommand": "pnpm install",
-  "outputDirectory": "dist",
-  "routes": [
-    {
-      "src": "^/api/(.*)",
-      "dest": "/api/$1"
-    },
-    {
-      "src": "^(?!/api/).*",
-      "dest": "/index.html"
-    }
-  ]
+  "outputDirectory": "dist"
 }
