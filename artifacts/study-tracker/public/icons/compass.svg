@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 192 192" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="192" height="192" fill="#fdfbf7" rx="45"/>
+  
+  <!-- Outer circle background -->
+  <circle cx="96" cy="96" r="85" fill="#fdfbf7"/>
+  
+  <!-- Main compass circle -->
+  <circle cx="96" cy="96" r="75" fill="none" stroke="#0f766e" stroke-width="10"/>
+  
+  <!-- Compass teal ring -->
+  <circle cx="96" cy="96" r="70" fill="none" stroke="#06b6d4" stroke-width="7"/>
+  
+  <!-- Cardinal marks -->
+  <g stroke="#0f766e" stroke-width="2.5" stroke-linecap="round">
+    <!-- North -->
+    <line x1="96" y1="20" x2="96" y2="32"/>
+    <!-- South -->
+    <line x1="96" y1="160" x2="96" y2="172"/>
+    <!-- East -->
+    <line x1="160" y1="96" x2="172" y2="96"/>
+    <!-- West -->
+    <line x1="20" y1="96" x2="32" y2="96"/>
+    <!-- NE marker -->
+    <line x1="138" y1="54" x2="146" y2="46"/>
+    <!-- SE marker -->
+    <line x1="138" y1="138" x2="146" y2="146"/>
+  </g>
+  
+  <!-- Compass needle - Teal (pointing NE) -->
+  <g>
+    <!-- Teal point (North-East) -->
+    <polygon points="96,96 142,52 128,74" fill="#06b6d4" opacity="0.95"/>
+    <!-- Gray back (South-West) -->
+    <polygon points="96,96 50,140 64,118" fill="#9ca3af" opacity="0.65"/>
+  </g>
+  
+  <!-- Needle center circle -->
+  <circle cx="96" cy="96" r="7" fill="white" stroke="#0f766e" stroke-width="1.5"/>
+  <circle cx="96" cy="96" r="4" fill="#0f766e"/>
+</svg>
