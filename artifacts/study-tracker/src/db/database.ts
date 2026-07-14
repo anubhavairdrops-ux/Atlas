@@ -143,7 +143,7 @@ export async function importData(data: {
         data.systems.map(s => {
           const base = { ...s, updatedAt: new Date(s.updatedAt) };
           // Migrate old-format backups (contentDone boolean → incremental fields)
-          const old = s as Record<string, unknown>;
+          const old = s as unknown as Record<string, unknown>;
           if (typeof old['contentDone'] === 'boolean' && !('contentInitialized' in s)) {
             const wasDone = Boolean(old['contentDone']);
             base.contentInitialized = wasDone;
