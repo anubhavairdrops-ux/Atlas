@@ -9,14 +9,11 @@ interface SubjectCardProps {
 }
 
 export function SubjectCard({ subject, systems }: SubjectCardProps) {
-  const totalTasks = systems.length * 5;
+  const totalTasks = systems.length * 2;
   const completedTasks = systems.reduce((acc, sys) => {
     let done = 0;
-    if (sys.contentDone) done++;
+    if (sys.contentCompleted) done++;
     if (sys.qbankDone) done++;
-    if (sys.revision1) done++;
-    if (sys.revision2) done++;
-    if (sys.revision3) done++;
     return acc + done;
   }, 0);
 
@@ -32,9 +29,9 @@ export function SubjectCard({ subject, systems }: SubjectCardProps) {
             <ChevronRight className="w-5 h-5 text-muted-foreground/50 group-hover:text-primary transition-colors" />
           </div>
         </div>
-        
+
         <ProgressBar progress={progress} className="h-2.5" />
-        
+
         <div className="mt-4 flex justify-between text-xs text-muted-foreground">
           <span>{systems.length} systems</span>
           <span>{completedTasks}/{totalTasks} tasks</span>

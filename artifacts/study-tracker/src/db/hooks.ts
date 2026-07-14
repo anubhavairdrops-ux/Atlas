@@ -28,7 +28,7 @@ export function useHistory() {
 export function useHistoryByMonth(year: number, month: number) {
   return useLiveQuery(() => {
     const start = new Date(year, month, 1);
-    const end   = new Date(year, month + 1, 1); // exclusive
+    const end   = new Date(year, month + 1, 1);
     return db.history
       .where('completedAt')
       .between(start, end, true, false)
@@ -44,13 +44,13 @@ export function useEarliestHistoryDate(): Date | null {
   }) ?? null;
 }
 
-// Actions
+// ── Actions ────────────────────────────────────────────────────────────────
 
 export async function addSubject(name: string) {
   return await db.subjects.add({
     name,
     createdAt: new Date(),
-    updatedAt: new Date()
+    updatedAt: new Date(),
   });
 }
 
@@ -70,15 +70,14 @@ export async function addSystem(subjectId: number, name: string) {
   return await db.systems.add({
     subjectId,
     name,
-    contentDone: false,
+    contentInitialized: false,
+    contentUnitsTotal: 0,
+    contentUnitsCompleted: 0,
+    contentCompleted: false,
     qbankDone: false,
-    pyqsDone: false,
-    revision1: false,
-    revision2: false,
-    revision3: false,
     weakAreas: '',
     status: 'Average',
-    updatedAt: new Date()
+    updatedAt: new Date(),
   });
 }
 

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useSubjects, useAllSystems, addSubject } from '@/db/hooks';
 import { SubjectCard } from '@/components/SubjectCard';
 import { AddDialog } from '@/components/AddDialog';
-import { Plus, BookOpen, Layers, CheckCircle } from 'lucide-react';
+import { Plus, BookOpen, Layers } from 'lucide-react';
 import { ProgressBar } from '@/components/ProgressBar';
 
 export default function Home() {
@@ -10,25 +10,16 @@ export default function Home() {
   const systems = useAllSystems();
   const [showAddSubject, setShowAddSubject] = useState(false);
 
-  // Calculate overall stats
-  const totalTasks = systems.length * 5;
+  const totalTasks = systems.length * 2;
   const completedTasks = systems.reduce((acc, sys) => {
     let done = 0;
-    if (sys.contentDone) done++;
+    if (sys.contentCompleted) done++;
     if (sys.qbankDone) done++;
-    if (sys.revision1) done++;
-    if (sys.revision2) done++;
-    if (sys.revision3) done++;
     return acc + done;
   }, 0);
 
   const overallProgress = totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
   const pendingTasks = totalTasks - completedTasks;
-
-  // Recently updated systems (last 4)
-  const recentSystems = [...systems]
-    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-    .slice(0, 4);
 
   return (
     <div className="min-h-[100dvh] bg-background px-4 pt-8 pb-24 max-w-3xl mx-auto">
@@ -37,7 +28,7 @@ export default function Home() {
         <p className="text-base text-muted-foreground">Welcome back. Stay focused, stay consistent.</p>
       </header>
 
-      {/* Stats Dashboard */}
+      {/* Stats */}
       <section className="grid grid-cols-2 gap-3 mb-10">
         <div className="col-span-2 bg-primary/10 rounded-2xl p-5 border border-primary/20">
           <div className="flex justify-between items-end mb-2">
@@ -47,7 +38,7 @@ export default function Home() {
           <ProgressBar progress={overallProgress} className="h-3 bg-primary/20" />
           <p className="text-xs text-primary/70 mt-3 font-medium">{completedTasks} of {totalTasks} tasks completed</p>
         </div>
-        
+
         <div className="bg-card rounded-2xl p-4 border shadow-sm flex flex-col justify-between">
           <div className="flex items-center gap-2 mb-2 text-muted-foreground">
             <BookOpen className="w-4 h-4" />
@@ -80,7 +71,7 @@ export default function Home() {
             <p className="text-muted-foreground text-sm mb-6 max-w-[250px] mx-auto">
               Create your first subject to start organizing your study material.
             </p>
-            <button 
+            <button
               onClick={() => setShowAddSubject(true)}
               className="bg-primary text-primary-foreground px-6 py-3 rounded-xl font-semibold shadow-sm hover:bg-primary/90 transition-colors"
             >
@@ -90,17 +81,16 @@ export default function Home() {
         ) : (
           <div className="grid gap-3">
             {subjects.map(subject => (
-              <SubjectCard 
-                key={subject.id} 
-                subject={subject} 
-                systems={systems.filter(s => s.subjectId === subject.id)} 
+              <SubjectCard
+                key={subject.id}
+                subject={subject}
+                systems={systems.filter(s => s.subjectId === subject.id)}
               />
             ))}
           </div>
         )}
       </section>
 
-      {/* FAB */}
       {subjects.length > 0 && (
         <button
           onClick={() => setShowAddSubject(true)}
@@ -111,7 +101,7 @@ export default function Home() {
         </button>
       )}
 
-      <AddDialog 
+      <AddDialog
         open={showAddSubject}
         onOpenChange={setShowAddSubject}
         title="New Subject"

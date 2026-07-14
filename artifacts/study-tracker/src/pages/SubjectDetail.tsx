@@ -12,15 +12,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { StudySystem } from '@/db/database';
 
-type StageKey = 'contentDone' | 'qbankDone' | 'pyqsDone' | 'revision1' | 'revision2' | 'revision3';
+type StageKey = 'contentCompleted' | 'qbankDone';
 
 const STAGES: { key: StageKey; label: string; color: string }[] = [
-  { key: 'contentDone', label: 'Content', color: '#3b82f6' },
-  { key: 'qbankDone',   label: 'QBank',   color: '#10b981' },
-  { key: 'pyqsDone',    label: 'PYQs',    color: '#8b5cf6' },
-  { key: 'revision1',   label: 'R1',      color: '#f97316' },
-  { key: 'revision2',   label: 'R2',      color: '#06b6d4' },
-  { key: 'revision3',   label: 'R3',      color: '#6b7280' },
+  { key: 'contentCompleted', label: 'Content', color: '#3b82f6' },
+  { key: 'qbankDone',        label: 'QBank',   color: '#10b981' },
 ];
 
 export default function SubjectDetail() {
@@ -41,28 +37,24 @@ export default function SubjectDetail() {
   }
   if (!subject) return null;
 
-  // Overall progress (6 steps)
-  const totalTasks = systems.length * 6;
+  // Overall progress (2 steps per system)
+  const totalTasks = systems.length * 2;
   const completedTasks = systems.reduce((acc, sys) => {
     let done = 0;
-    if (sys.contentDone) done++;
-    if (sys.qbankDone)   done++;
-    if (sys.pyqsDone)    done++;
-    if (sys.revision1)   done++;
-    if (sys.revision2)   done++;
-    if (sys.revision3)   done++;
+    if (sys.contentCompleted) done++;
+    if (sys.qbankDone) done++;
     return acc + done;
   }, 0);
   const progress = totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
 
-  // Per-stage percentages
+  // Per-stage percentages (% of systems that have completed this stage)
   const stagePct = (key: StageKey) => {
     if (systems.length === 0) return 0;
     const done = systems.filter(s => s[key]).length;
     return Math.round((done / systems.length) * 100);
   };
 
-  // Filtered systems list
+  // Filtered systems (show systems missing the active filter stage)
   const visibleSystems: StudySystem[] = activeFilter
     ? systems.filter(s => !s[activeFilter])
     : systems;
@@ -99,9 +91,9 @@ export default function SubjectDetail() {
           <DropdownMenu>
             <DropdownMenuTrigger className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-muted text-muted-foreground transition-colors focus:outline-none">
               <div className="flex gap-1">
-                <span className="w-1 h-1 rounded-full bg-current"></span>
-                <span className="w-1 h-1 rounded-full bg-current"></span>
-                <span className="w-1 h-1 rounded-full bg-current"></span>
+                <span className="w-1 h-1 rounded-full bg-current" />
+                <span className="w-1 h-1 rounded-full bg-current" />
+                <span className="w-1 h-1 rounded-full bg-current" />
               </div>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48 rounded-xl">
@@ -126,20 +118,20 @@ export default function SubjectDetail() {
             </div>
             <ProgressBar progress={progress} className="h-2.5" />
           </div>
-          <div className="h-10 w-px bg-border mx-2"></div>
+          <div className="h-10 w-px bg-border mx-2" />
           <div className="text-center min-w-[3rem]">
             <div className="text-xl font-bold text-foreground leading-none mb-1">{systems.length}</div>
             <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Systems</div>
           </div>
         </div>
 
-        {/* Learning Progress donuts — only when there are systems */}
+        {/* Stage donuts */}
         {systems.length > 0 && (
           <div className="mt-3 bg-card border rounded-2xl px-3 py-3">
             <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-3 px-1">
               Learning Progress
             </p>
-            <div className="grid grid-cols-3 gap-y-1">
+            <div className="grid grid-cols-2 gap-y-1">
               {STAGES.map(({ key, label, color }) => (
                 <StageDonut
                   key={key}
@@ -166,7 +158,7 @@ export default function SubjectDetail() {
         )}
       </header>
 
-      {/* Systems List */}
+      {/* Systems list */}
       <section>
         {systems.length === 0 ? (
           <div className="text-center py-16 px-4 bg-muted/30 rounded-3xl border border-dashed mt-8">
@@ -215,7 +207,6 @@ export default function SubjectDetail() {
         </button>
       )}
 
-      {/* Add System Dialog */}
       <AddDialog
         open={showAddSystem}
         onOpenChange={setShowAddSystem}
@@ -224,7 +215,7 @@ export default function SubjectDetail() {
         onSave={(name) => addSystem(subject.id!, name)}
       />
 
-      {/* Edit Subject Dialog */}
+      {/* Rename dialog */}
       <Dialog open={showEdit} onOpenChange={setShowEdit}>
         <DialogContent className="sm:max-w-[425px] rounded-2xl mx-4 w-[calc(100%-2rem)]">
           <DialogHeader>
@@ -234,13 +225,17 @@ export default function SubjectDetail() {
             <Input
               autoFocus
               value={editName}
-              onChange={(e) => setEditName(e.target.value)}
+              onChange={e => setEditName(e.target.value)}
               className="text-lg py-6 px-4 bg-muted/50 border-transparent focus-visible:ring-primary focus-visible:bg-background"
             />
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setShowEdit(false)} className="rounded-xl">Cancel</Button>
-            <Button onClick={handleSaveEdit} disabled={!editName.trim() || editName === subject.name} className="rounded-xl font-semibold px-8 shadow-sm">
+            <Button
+              onClick={handleSaveEdit}
+              disabled={!editName.trim() || editName === subject.name}
+              className="rounded-xl font-semibold px-8 shadow-sm"
+            >
               Save
             </Button>
           </DialogFooter>

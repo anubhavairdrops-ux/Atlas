@@ -13,12 +13,14 @@ export interface StudySystem {
   id?: number;
   subjectId: number;
   name: string;
-  contentDone: boolean;
+  // Content — incremental progress
+  contentInitialized: boolean;
+  contentUnitsTotal: number;
+  contentUnitsCompleted: number;
+  contentCompleted: boolean;
+  // QBank — binary
   qbankDone: boolean;
-  pyqsDone: boolean;
-  revision1: boolean;
-  revision2: boolean;
-  revision3: boolean;
+  // Notes & metadata (kept for extensibility with future revision fields)
   weakAreas: string;
   status: SystemStatus;
   updatedAt: Date;
@@ -44,19 +46,39 @@ export class AtlasDB extends Dexie {
     super('AtlasDB');
     this.version(1).stores({
       subjects: '++id, name',
-      systems: '++id, subjectId, name, updatedAt'
+      systems: '++id, subjectId, name, updatedAt',
     });
     this.version(2).stores({
       subjects: '++id, name',
       systems: '++id, subjectId, name, updatedAt',
-      history: '++id, subjectId, systemId, completedAt'
+      history: '++id, subjectId, systemId, completedAt',
     });
+    // v3: replace binary contentDone with incremental content progress
+    this.version(3)
+      .stores({
+        subjects: '++id, name',
+        systems: '++id, subjectId, name, updatedAt',
+        history: '++id, subjectId, systemId, completedAt',
+      })
+      .upgrade(tx => {
+        return tx
+          .table('systems')
+          .toCollection()
+          .modify((sys: Record<string, unknown>) => {
+            const wasDone = Boolean(sys['contentDone']);
+            sys['contentInitialized'] = wasDone;
+            sys['contentUnitsTotal'] = wasDone ? 1 : 0;
+            sys['contentUnitsCompleted'] = wasDone ? 1 : 0;
+            sys['contentCompleted'] = wasDone;
+          });
+      });
   }
 }
 
 export const db = new AtlasDB();
 
-// DB Helpers for imports/exports
+// ── Export / Import ────────────────────────────────────────────────────────
+
 export async function exportData() {
   const subjects = await db.subjects.toArray();
   const systems = await db.systems.toArray();
@@ -64,32 +86,48 @@ export async function exportData() {
   return { subjects, systems, history };
 }
 
-export async function importData(data: { subjects: Subject[], systems: StudySystem[], history?: HistoryEntry[] }) {
+export async function importData(data: {
+  subjects: Subject[];
+  systems: StudySystem[];
+  history?: HistoryEntry[];
+}) {
   await db.transaction('rw', db.subjects, db.systems, db.history, async () => {
     await db.subjects.clear();
     await db.systems.clear();
     await db.history.clear();
+
     if (data.subjects?.length) {
-      const parsedSubjects = data.subjects.map(s => ({
-        ...s,
-        createdAt: new Date(s.createdAt),
-        updatedAt: new Date(s.updatedAt)
-      }));
-      await db.subjects.bulkAdd(parsedSubjects);
+      await db.subjects.bulkAdd(
+        data.subjects.map(s => ({
+          ...s,
+          createdAt: new Date(s.createdAt),
+          updatedAt: new Date(s.updatedAt),
+        })),
+      );
     }
+
     if (data.systems?.length) {
-      const parsedSystems = data.systems.map(s => ({
-        ...s,
-        updatedAt: new Date(s.updatedAt)
-      }));
-      await db.systems.bulkAdd(parsedSystems);
+      await db.systems.bulkAdd(
+        data.systems.map(s => {
+          const base = { ...s, updatedAt: new Date(s.updatedAt) };
+          // Migrate old-format backups (contentDone boolean → incremental fields)
+          const old = s as Record<string, unknown>;
+          if (typeof old['contentDone'] === 'boolean' && !('contentInitialized' in s)) {
+            const wasDone = Boolean(old['contentDone']);
+            base.contentInitialized = wasDone;
+            base.contentUnitsTotal = wasDone ? 1 : 0;
+            base.contentUnitsCompleted = wasDone ? 1 : 0;
+            base.contentCompleted = wasDone;
+          }
+          return base;
+        }),
+      );
     }
+
     if (data.history?.length) {
-      const parsedHistory = data.history.map(h => ({
-        ...h,
-        completedAt: new Date(h.completedAt)
-      }));
-      await db.history.bulkAdd(parsedHistory);
+      await db.history.bulkAdd(
+        data.history.map(h => ({ ...h, completedAt: new Date(h.completedAt) })),
+      );
     }
   });
 }
