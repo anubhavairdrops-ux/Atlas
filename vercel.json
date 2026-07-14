@@ -1,5 +1,5 @@
 {
-  "buildCommand": "cd artifacts/study-tracker && pnpm run build && mkdir -p ../../dist && cp -r dist/* ../../dist/",
+  "buildCommand": "cd artifacts/study-tracker && vite build --config vite.config.ts && mkdir -p ../../dist && cp -r dist/* ../../dist/ || exit 1",
   "installCommand": "pnpm install",
   "nodeVersion": "20.x",
   "outputDirectory": "dist",
